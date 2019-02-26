@@ -19,6 +19,8 @@ class FPI():
         if 0 > support or support > 1:
             raise Exception("support must be on the interval <0;1>")
 
+        if not isinstance(data, pd.DataFrame):
+            raise Exception("Data must be Pandas DataFrame")
         self.support = support
         self.data = data
 
@@ -26,16 +28,21 @@ class FPI():
 
         """
         Takes variables from constructor and outputs
-        anomaly scores for each row
+        anomaly scores for each row/observation
         """
         rows = len(self.data.index)
         cols = len(self.data.columns)
         mlen = cols
 
+        # adding column name to each row
+        data2 = pd.DataFrame({col:str(col)+'=' for col in self.data}, index=self.data.index) + self.data.astype(str)
+
+
+
         # transforming dataset to list of lists
         records = []
         for i in range(0, rows):
-            records.append([str(self.data.values[i, j]) for j in range(0, cols)])
+            records.append([str(data2.values[i, j]) for j in range(0, cols)])
 
         # creating transaction dataset
         te = TransactionEncoder()
@@ -51,10 +58,6 @@ class FPI():
         frequent_itemsets['length'] = frequent_itemsets['itemsets'].apply(lambda x: len(x))
         fiLenghts = np.array([frequent_itemsets['length']])
         fiQualities = np.array([frequent_itemsets['support']])
-
-        items = frequent_itemsets['itemsets']
-        itemsets_list = list(frequent_itemsets['itemsets'])
-        itemsets = np.array([frequent_itemsets['itemsets']])
 
         # converting itemsets to frozensets so subsetting can be done
         items_list = []
@@ -81,6 +84,8 @@ class FPI():
                     tmp.append(0)
 
         coverages = np.array([tmp])
+
+        # converting coverages to valid shape and creating transpose matrix
         fiCoverages = coverages.reshape(len(frequent_itemsets), rows)
         fiCoveragesT = np.transpose(fiCoverages)
         fiQualitiesT = np.transpose(fiQualities)
@@ -88,6 +93,7 @@ class FPI():
         # compute basic score for each coverage
         result = 1 / (fiQualitiesT * fiLenghts)
 
+        # create matrix with results on diagonal
         result2 = np.diagonal(result)
         shape = (len(frequent_itemsets), len(frequent_itemsets))
         diagonalHelper = np.zeros(shape)
@@ -100,7 +106,10 @@ class FPI():
 
         dataItems = pd.DataFrame(data_items)
 
+        # coverage of each data item
         dataItemsList = []
+
+        # converting to frozenset so subsetting can be done
         for i in range(0, len(dataItems.values)):
             dataItemsList.append(frozenset([str(dataItems.values[i, j]) for j in range(0, 1)]))
 
@@ -129,14 +138,22 @@ class FPI():
 
         fiC = colSums - right
 
+
         # compute final score as a mean value of scores and penalizations: (sum of scores + penalization*number of transactions)/(number of scores + penalization)
         scorings = (scores.sum(axis=1) + fiC * rows) / (rowSums + fiC)
 
+
+
         # print scores as pandas data frame
+        # data2 = self.data.apply(lambda x: x.index + '=', axis=1) + self.data.astype(str)
         columnOutput = ["Scores"]
-        output = pd.DataFrame(data=np.transpose(scorings), columns=columnOutput, index=self.data.values)
+        output = pd.DataFrame(data=np.transpose(scorings), index=data2.values, columns=columnOutput, dtype=object)
 
         print(output)
+
+        print(output[output['Scores'] == output['Scores'].max()])
+
+        print(output[output['Scores'] == output['Scores'].min()])
 
 
 
