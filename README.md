@@ -8,8 +8,7 @@ https://github.com/jaroslav-kuchar/fpmoutliers
 
 Basic example:
 
-Note that you have to use pandas DataFrame as a first parametr and float as a support. Support can't be greater than 1 and less than 
-0 or you'll get an error.
+Note that you have to use pandas DataFrame as a first parametr and float as second. Second parametr (support) can't be greater than 1 and less than 0 or you'll get an error.
 
 ```python
 from FPI import FPI
