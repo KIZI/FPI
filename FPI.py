@@ -5,7 +5,9 @@ from mlxtend.frequent_patterns import apriori
 
 class FPI():
     """
-    Algorithm proposed by J.Kuchar and V.Svatek
+    Algorithm proposed by:
+    J. Kuchar, V. Svatek: Spotlighting Anomalies using Frequent Patterns, Proceedings of the KDD 2017 Workshop on Anomaly Detection in Finance, Halifax, Nova Scotia, Canada, PMLR, 2017.
+    FPI stands for Frequent Pattern Isolation
 
      Parameters:
 
@@ -28,16 +30,18 @@ class FPI():
 
         """
         Takes variables from constructor and outputs
-        anomaly scores for each row/observation
+        anomaly scores for each row/observation as a pandas data frame
         """
+
+        # create variables which number of rows and columns
         rows = len(self.data.index)
         cols = len(self.data.columns)
+
+        # maximum length which will be used in apriori algorithm
         mlen = cols
 
         # adding column name to each row
         data2 = pd.DataFrame({col:str(col)+'=' for col in self.data}, index=self.data.index) + self.data.astype(str)
-
-
 
         # transforming dataset to list of lists
         records = []
@@ -48,6 +52,7 @@ class FPI():
         te = TransactionEncoder()
         oht_ary = te.fit(records).transform(records, sparse=True)
 
+        # creating sparse data frame from transaction encoder
         sparse_df = pd.SparseDataFrame(oht_ary, columns=te.columns_, default_fill_value=False)
 
         # using apriori to find frequent itemsets
@@ -56,6 +61,8 @@ class FPI():
 
         # adding new column lenght of the rule
         frequent_itemsets['length'] = frequent_itemsets['itemsets'].apply(lambda x: len(x))
+
+        # creating a numpy array of lengths and qualities so operation such as multiplication can be done
         fiLenghts = np.array([frequent_itemsets['length']])
         fiQualities = np.array([frequent_itemsets['support']])
 
@@ -72,10 +79,10 @@ class FPI():
             i = frozenset(i)
             transactions.append(i)
 
-
+        # list that will temporarily store coverages
         tmp = []
 
-        # comparing each transacation with itemsets
+        # comparing each transaction with itemsets
         for i in items_list:
             for i2 in transactions:
                 if i.issubset(i2):
@@ -83,6 +90,7 @@ class FPI():
                 else:
                     tmp.append(0)
 
+        # converting coverages to numpy array
         coverages = np.array([tmp])
 
         # converting coverages to valid shape and creating transpose matrix
@@ -96,9 +104,12 @@ class FPI():
         # create matrix with results on diagonal
         result2 = np.diagonal(result)
         shape = (len(frequent_itemsets), len(frequent_itemsets))
+
+        # it was necessary to create matrix with zeros to have matrix with particular shape with values only on the diagonal
         diagonalHelper = np.zeros(shape)
         np.fill_diagonal(diagonalHelper, result2)
 
+        # matrix multiplication
         scores = np.matmul(fiCoveragesT, diagonalHelper)
 
         # prepare  items for subsetting
@@ -122,37 +133,41 @@ class FPI():
                     dataItemsCoverage.append(1)
                 else:
                     dataItemsCoverage.append(0)
+
+        # converting coverages to numpy array
         dataItemsCoverageArr = np.array([dataItemsCoverage])
 
         tmp4 = dataItemsCoverageArr.reshape(len(dataItems.values), len(frequent_itemsets))
-        tmp6 = np.transpose([tmp4.sum(axis=1)])
 
+        # variable that stores sum of columns
         colSums = np.array(self.data.count(axis=1))
 
+        # variable that stores sum of rows
         rowSums = np.array([fiCoveragesT.sum(axis=1)])
 
+        # preparing parts of the equation
+        part1 = np.matmul(fiCoveragesT, np.transpose(tmp4))
+
+        part2 = part1.sum(axis=1)
+
         # compute how many items of each transaction is not covered by appropriate frequent itemsets
-        left = np.matmul(fiCoveragesT, np.transpose(tmp4))
-
-        right = left.sum(axis=1)
-
-        fiC = colSums - right
+        fiC = colSums - part2
 
 
         # compute final score as a mean value of scores and penalizations: (sum of scores + penalization*number of transactions)/(number of scores + penalization)
         scorings = (scores.sum(axis=1) + fiC * rows) / (rowSums + fiC)
 
-
-
-        # print scores as pandas data frame
-        # data2 = self.data.apply(lambda x: x.index + '=', axis=1) + self.data.astype(str)
+        # creating pandas data frame with Scores column
         columnOutput = ["Scores"]
         output = pd.DataFrame(data=np.transpose(scorings), index=data2.values, columns=columnOutput, dtype=object)
 
+        # print anomaly scores for each row/observation
         print(output)
 
+        # returns maximum value of anomaly scores
         print(output[output['Scores'] == output['Scores'].max()])
 
+        # returns minimum value of anomaly scores
         print(output[output['Scores'] == output['Scores'].min()])
 
 
