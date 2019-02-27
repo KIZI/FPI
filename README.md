@@ -8,16 +8,16 @@ https://github.com/jaroslav-kuchar/fpmoutliers
 
 Basic example:
 
-Note that you have to use pandas DataFrame as a first parametr and float as second. Second parametr (support) can't be greater than 1 and less than 0 or you'll get an error.
+Note that you have to use pandas DataFrame as a first parameter and float as second. Second parameter (support) can't be greater than 1 and less than 0 or you'll get an error.
 
 ```python
 from FPI import FPI
 import pandas as pd
 
 data = pd.read_csv("data/customerData.csv")
-abc = FPI(data, 0.3)
+fpi = FPI(data, support=0.3)
 
-FPI.build(abc)
+FPI.build(fpi)
 ```
 
 ## Output
