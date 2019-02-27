@@ -33,7 +33,7 @@ class FPI():
         anomaly scores for each row/observation as a pandas data frame
         """
 
-        # create variables which number of rows and columns
+        # create variables which hold number of rows and columns
         rows = len(self.data.index)
         cols = len(self.data.columns)
 
