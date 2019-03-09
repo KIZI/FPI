@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from mlxtend.preprocessing import TransactionEncoder
 from mlxtend.frequent_patterns import apriori
+import fim
 
 class FPI():
     """
@@ -23,7 +24,7 @@ class FPI():
 
         if not isinstance(data, pd.DataFrame):
             raise Exception("Data must be Pandas DataFrame")
-        self.support = support
+        self.support = support * 100
         self.data = data
 
     def build(self):
@@ -49,6 +50,7 @@ class FPI():
             records.append([str(data2.values[i, j]) for j in range(0, cols)])
 
         # creating transaction dataset
+        print("creating transactions")
         te = TransactionEncoder()
         oht_ary = te.fit(records).transform(records, sparse=True)
 
@@ -56,19 +58,21 @@ class FPI():
         sparse_df = pd.SparseDataFrame(oht_ary, columns=te.columns_, default_fill_value=False)
 
         # using apriori to find frequent itemsets
-
-        frequent_itemsets = apriori(sparse_df, min_support=self.support, use_colnames=True, max_len=mlen, n_jobs=1)
+        print("using apriori")
+        apr = fim.apriori(records, target="s", supp=self.support, zmax=cols, report="s")
 
         # adding new column lenght of the rule
-        frequent_itemsets['length'] = frequent_itemsets['itemsets'].apply(lambda x: len(x))
+
+        frequent_itemsets = pd.DataFrame(apr)
+        frequent_itemsets['length'] = frequent_itemsets[0].apply(lambda x: len(x))
 
         # creating a numpy array of lengths and qualities so operation such as multiplication can be done
         fiLenghts = np.array([frequent_itemsets['length']])
-        fiQualities = np.array([frequent_itemsets['support']])
+        fiQualities = np.array([frequent_itemsets[1]])
 
         # converting itemsets to frozensets so subsetting can be done
         items_list = []
-        fi = frequent_itemsets['itemsets']
+        fi = frequent_itemsets[0]
         for i in fi:
             items_frozen = frozenset(i)
             items_list.append(items_frozen)
@@ -82,6 +86,7 @@ class FPI():
         # list that will temporarily store coverages
         tmp = []
 
+        print("computing coverages")
         # comparing each transaction with itemsets
         for i in items_list:
             for i2 in transactions:
@@ -168,7 +173,7 @@ class FPI():
         print(output[output['Scores'] == output['Scores'].max()])
 
         # returns minimum value of anomaly scores
-        print(output[output['Scores'] == output['Scores'].min()])
+        #print(output[output['Scores'] == output['Scores'].min()])
 
 
 
