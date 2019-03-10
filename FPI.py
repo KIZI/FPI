@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 from mlxtend.preprocessing import TransactionEncoder
-from mlxtend.frequent_patterns import apriori
 import fim
 
 class FPI():
@@ -15,17 +14,22 @@ class FPI():
      -----------
      support:float
      data: pandas dataFrame
+     mlen: integer
 
     """
 
-    def __init__(self, data, support):
+    def __init__(self, data, support=0.1, mlen=0.5):
         if 0 > support or support > 1:
             raise Exception("support must be on the interval <0;1>")
+        if mlen < 0:
+            raise Exception("maximum length must be greater than 0")
 
         if not isinstance(data, pd.DataFrame):
             raise Exception("Data must be Pandas DataFrame")
+
         self.support = support * 100
         self.data = data
+        self.mlen = mlen
 
     def build(self):
 
@@ -38,8 +42,9 @@ class FPI():
         rows = len(self.data.index)
         cols = len(self.data.columns)
 
-        # maximum length which will be used in apriori algorithm
-        mlen = cols
+        # default value of mlen parameter is equal to number of columns
+        if self.mlen == 0.5:
+            self.mlen = cols
 
         # adding column name to each row
         data2 = pd.DataFrame({col:str(col)+'=' for col in self.data}, index=self.data.index) + self.data.astype(str)
@@ -59,9 +64,9 @@ class FPI():
 
         # using apriori to find frequent itemsets
         print("using apriori")
-        apr = fim.apriori(records, target="s", supp=self.support, zmax=cols, report="s")
+        apr = fim.apriori(records, target="s", supp=self.support, zmax=self.mlen, report="s")
 
-        # adding new column lenght of the rule
+        # adding new column length of the rule
 
         frequent_itemsets = pd.DataFrame(apr)
         frequent_itemsets['length'] = frequent_itemsets[0].apply(lambda x: len(x))
@@ -172,8 +177,12 @@ class FPI():
         # returns maximum value of anomaly scores
         print(output[output['Scores'] == output['Scores'].max()])
 
-        # returns minimum value of anomaly scores
-        #print(output[output['Scores'] == output['Scores'].min()])
+        return output
+
+
+
+
+
 
 
 
