@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 from mlxtend.preprocessing import TransactionEncoder
 import fim
+import time
 
 class FPI():
     """
@@ -31,6 +32,7 @@ class FPI():
         self.data = data
         self.mlen = mlen
 
+
     def build(self):
 
         """
@@ -55,19 +57,24 @@ class FPI():
             records.append([str(data2.values[i, j]) for j in range(0, cols)])
 
         # creating transaction dataset
-        print("creating transactions")
+        print("Creating transactions from a dataset")
+        t = time.process_time()
         te = TransactionEncoder()
         oht_ary = te.fit(records).transform(records, sparse=True)
-
+        elapsed_time = time.process_time() - t
+        print("Transactions created in: "+str(elapsed_time))
         # creating sparse data frame from transaction encoder
         sparse_df = pd.SparseDataFrame(oht_ary, columns=te.columns_, default_fill_value=False)
 
         # using apriori to find frequent itemsets
-        print("using apriori")
+        supp = self.support / 100
+        print("Running apriori with settings: support={}, maxlen={}".format(supp, self.mlen))
+        t = time.process_time()
         apr = fim.apriori(records, target="s", supp=self.support, zmax=self.mlen, report="s")
+        elapsed_time = time.process_time() - t
+        print("Apriory finished in: "+str(elapsed_time))
 
         # adding new column length of the rule
-
         frequent_itemsets = pd.DataFrame(apr)
         frequent_itemsets['length'] = frequent_itemsets[0].apply(lambda x: len(x))
 
@@ -76,6 +83,8 @@ class FPI():
         fiQualities = np.array([frequent_itemsets[1]])
 
         # converting itemsets to frozensets so subsetting can be done
+        print("Converting to datasets frozensets and computing coverages")
+        t = time.process_time()
         items_list = []
         fi = frequent_itemsets[0]
         for i in fi:
@@ -91,7 +100,7 @@ class FPI():
         # list that will temporarily store coverages
         tmp = []
 
-        print("computing coverages")
+        print("Computing coverages")
         # comparing each transaction with itemsets
         for i in items_list:
             for i2 in transactions:
@@ -102,15 +111,19 @@ class FPI():
 
         # converting coverages to numpy array
         coverages = np.array([tmp])
-
+        elapsed_time = time.process_time() - t
+        print("Computing coverages finished in: "+str(elapsed_time))
         # converting coverages to valid shape and creating transpose matrix
         fiCoverages = coverages.reshape(len(frequent_itemsets), rows)
         fiCoveragesT = np.transpose(fiCoverages)
         fiQualitiesT = np.transpose(fiQualities)
 
         # compute basic score for each coverage
+        t = time.process_time()
+        print("Computing results for each coverage")
         result = 1 / (fiQualitiesT * fiLenghts)
-
+        elapsed_time = time.process_time() - t
+        print("Computing results finished in: "+str(elapsed_time))
         # create matrix with results on diagonal
         result2 = np.diagonal(result)
         shape = (len(frequent_itemsets), len(frequent_itemsets))
@@ -150,6 +163,8 @@ class FPI():
         tmp4 = dataItemsCoverageArr.reshape(len(dataItems.values), len(frequent_itemsets))
 
         # variable that stores sum of columns
+        print("Computing penalizations")
+        t = time.process_time()
         colSums = np.array(self.data.count(axis=1))
 
         # variable that stores sum of rows
@@ -162,11 +177,15 @@ class FPI():
 
         # compute how many items of each transaction is not covered by appropriate frequent itemsets
         fiC = colSums - part2
-
+        elapsed_time = time.process_time() - t
+        print("Computing penalizations finished in: "+str(elapsed_time))
 
         # compute final score as a mean value of scores and penalizations: (sum of scores + penalization*number of transactions)/(number of scores + penalization)
+        print("Computing scores for each row")
+        t = time.process_time()
         scorings = (scores.sum(axis=1) + fiC * rows) / (rowSums + fiC)
-
+        elapsed_time = time.process_time() - t
+        print("Computing final scores finished in: "+str(elapsed_time))
         # creating pandas data frame with Scores column
         columnOutput = ["Scores"]
         output = pd.DataFrame(data=np.transpose(scorings), index=data2.values, columns=columnOutput, dtype=object)
