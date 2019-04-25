@@ -4,6 +4,7 @@ from mlxtend.preprocessing import TransactionEncoder
 import fim
 import time
 
+
 class FPI():
     """
     Algorithm proposed by:
@@ -77,10 +78,10 @@ class FPI():
         # adding new column length of the rule
         frequent_itemsets = pd.DataFrame(apr)
         frequent_itemsets['length'] = frequent_itemsets[0].apply(lambda x: len(x))
-
+        print(frequent_itemsets.index)
         # creating a numpy array of lengths and qualities so operation such as multiplication can be done
-        fiLenghts = np.array([frequent_itemsets['length']])
-        fiQualities = np.array([frequent_itemsets[1]])
+        fiLenghts = np.array([frequent_itemsets['length']], np.int8)
+        fiQualities = np.array([frequent_itemsets[1]], np.float16)
 
         # converting itemsets to frozensets so subsetting can be done
         print("Converting to datasets frozensets and computing coverages")
@@ -99,7 +100,6 @@ class FPI():
 
         # list that will temporarily store coverages
         tmp = []
-
         print("Computing coverages")
         # comparing each transaction with itemsets
         for i in items_list:
@@ -115,13 +115,14 @@ class FPI():
         print("Computing coverages finished in: "+str(elapsed_time))
         # converting coverages to valid shape and creating transpose matrix
         fiCoverages = coverages.reshape(len(frequent_itemsets), rows)
-        fiCoveragesT = np.transpose(fiCoverages)
+        fiCoveragesT = np.array(np.transpose(fiCoverages))
         fiQualitiesT = np.transpose(fiQualities)
 
         # compute basic score for each coverage
         t = time.process_time()
         print("Computing results for each coverage")
-        result = 1 / (fiQualitiesT * fiLenghts)
+        result = np.array(1/(fiLenghts * np.transpose(fiQualities)), dtype=np.float16)
+        print(result)
         elapsed_time = time.process_time() - t
         print("Computing results finished in: "+str(elapsed_time))
         # create matrix with results on diagonal
@@ -133,8 +134,9 @@ class FPI():
         np.fill_diagonal(diagonalHelper, result2)
 
         # matrix multiplication
-        scores = np.matmul(fiCoveragesT, diagonalHelper)
-
+        print("Computing individual scores")
+        scores = np.array(np.matmul(fiCoveragesT, diagonalHelper))
+        print("Done")
         # prepare  items for subsetting
         data_items = sparse_df.columns.values.tolist()
 
@@ -196,6 +198,7 @@ class FPI():
         # returns maximum value of anomaly scores
         print(output[output['Scores'] == output['Scores'].max()])
 
+        print(fiC)
         return output
 
 
