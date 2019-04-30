@@ -1,6 +1,6 @@
 import unittest
 import pandas as pd
-from FPI import FPI
+from FPI_old import FPI
 import pandas.util.testing
 
 dataset_file = pd.read_csv("data/customerData.csv")

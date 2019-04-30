@@ -1,4 +1,4 @@
-from FPI import FPI
+from FPI_old import FPI
 import pandas as pd
 
 data = pd.read_csv("test/data/trainData.csv", sep=";")

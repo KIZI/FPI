@@ -3,8 +3,7 @@ import pandas as pd
 from mlxtend.preprocessing import TransactionEncoder
 import fim
 import time
-from scipy.sparse import csr_matrix, csc_matrix, bsr_matrix, coo_matrix
-from sklearn.metrics import accuracy_score, confusion_matrix
+
 
 class FPI():
     """
@@ -21,7 +20,7 @@ class FPI():
 
     """
 
-    def __init__(self, data, support=0.1, mlen=0):
+    def __init__(self, data, support=0.1, mlen=0.5):
         if 0 > support or support > 1:
             raise Exception("support must be on the interval <0;1>")
         if mlen < 0:
@@ -35,7 +34,7 @@ class FPI():
         self.mlen = mlen
 
 
-    def fit(self):
+    def build(self):
 
         """
         Takes variables from constructor and outputs
@@ -47,16 +46,16 @@ class FPI():
         cols = len(self.data.columns)
 
         # default value of mlen parameter is equal to number of columns
-        if self.mlen == 0:
+        if self.mlen == 0.5:
             self.mlen = cols
 
         # adding column name to each row
-        self.data = pd.DataFrame({col:str(col)+'=' for col in self.data}, index=self.data.index) + self.data.astype(str)
+        data2 = pd.DataFrame({col:str(col)+'=' for col in self.data}, index=self.data.index) + self.data.astype(str)
 
         # transforming dataset to list of lists
         records = []
         for i in range(0, rows):
-            records.append([str(self.data.values[i, j]) for j in range(0, cols)])
+            records.append([str(data2.values[i, j]) for j in range(0, cols)])
 
         # creating transaction dataset
         print("Creating transactions from a dataset")
@@ -74,23 +73,16 @@ class FPI():
         t = time.process_time()
         apr = fim.apriori(records, target="s", supp=self.support, zmax=self.mlen, report="s")
         elapsed_time = time.process_time() - t
-        print("Apriori finished in: "+str(elapsed_time))
+        print("Apriory finished in: "+str(elapsed_time))
 
         # adding new column length of the rule
         frequent_itemsets = pd.DataFrame(apr)
-        print("Computing fiLengths")
-        t = time.process_time()
         frequent_itemsets['length'] = frequent_itemsets[0].apply(lambda x: len(x))
+        print(frequent_itemsets.index)
+        # creating a numpy array of lengths and qualities so operation such as multiplication can be done
+        fiLenghts = np.array([frequent_itemsets['length']], np.int8)
+        fiQualities = np.array([frequent_itemsets[1]], np.float16)
 
-        # creating a matrix of lengths and qualities so operation such as multiplication can be done
-        fiLenghts = coo_matrix([frequent_itemsets['length']], dtype=np.int8)
-        elapsed_time = time.process_time() - t
-        print("Computing fiLengths finished in: " + str(elapsed_time))
-        print("Computing fiQualities")
-        t = time.process_time()
-        fiQualities = coo_matrix([frequent_itemsets[1]], dtype=np.float16)
-        elapsed_time = time.process_time() - t
-        print("Computing fiQualities finished in: " + str(elapsed_time))
         # converting itemsets to frozensets so subsetting can be done
         print("Converting to datasets frozensets and computing coverages")
         t = time.process_time()
@@ -122,30 +114,29 @@ class FPI():
         elapsed_time = time.process_time() - t
         print("Computing coverages finished in: "+str(elapsed_time))
         # converting coverages to valid shape and creating transpose matrix
-        fiCoveragesArr = coverages.reshape(len(frequent_itemsets), rows)
-        fiCoveragesArrT = np.transpose(fiCoveragesArr)
-        fiCoverages = csr_matrix(fiCoveragesArrT)
+        fiCoverages = coverages.reshape(len(frequent_itemsets), rows)
+        fiCoveragesT = np.array(np.transpose(fiCoverages))
+        fiQualitiesT = np.transpose(fiQualities)
 
-        # multiply lengths and qualities
+        # compute basic score for each coverage
         t = time.process_time()
-        print("Multiplication of qualities and lengths")
-        result1 = coo_matrix(fiQualities.tocsc().T.multiply(fiLenghts.tocsr()))
-        result = 1 / result1.toarray()
-
+        print("Computing results for each coverage")
+        result = np.array(1/(fiLenghts * np.transpose(fiQualities)), dtype=np.float16)
+        print(result)
+        elapsed_time = time.process_time() - t
+        print("Computing results finished in: "+str(elapsed_time))
         # create matrix with results on diagonal
-        result2 = result.diagonal()
+        result2 = np.diagonal(result)
+        shape = (len(frequent_itemsets), len(frequent_itemsets))
 
         # it was necessary to create matrix with zeros to have matrix with particular shape with values only on the diagonal
-        diagonalHelper = np.zeros(shape=(len(frequent_itemsets), len(frequent_itemsets)))
+        diagonalHelper = np.zeros(shape)
+        np.fill_diagonal(diagonalHelper, result2)
 
-        abcd = coo_matrix(diagonalHelper)
-
-        abcd.setdiag(result2)
-        # Compute basic scores for each coverage
-        print("Computing individual scores for each coverage")
-        scores = fiCoverages.dot(abcd.tocsr())
-        elapsed_time = time.process_time() - t
-        print("Computing results finished in: " + str(elapsed_time))
+        # matrix multiplication
+        print("Computing individual scores")
+        scores = np.array(np.matmul(fiCoveragesT, diagonalHelper))
+        print("Done")
         # prepare  items for subsetting
         data_items = sparse_df.columns.values.tolist()
 
@@ -169,23 +160,25 @@ class FPI():
                     dataItemsCoverage.append(0)
 
         # converting coverages to numpy array
-        dataItemsCoverageArr = np.array(dataItemsCoverage)
+        dataItemsCoverageArr = np.array([dataItemsCoverage])
 
         tmp4 = dataItemsCoverageArr.reshape(len(dataItems.values), len(frequent_itemsets))
-        tmp5 = coo_matrix(tmp4)
+
         # variable that stores sum of columns
         print("Computing penalizations")
         t = time.process_time()
-        colSums = csr_matrix(self.data.count(axis=1))
+        colSums = np.array(self.data.count(axis=1))
 
         # variable that stores sum of rows
-        rowSums = fiCoverages.sum(axis=1)
+        rowSums = np.array([fiCoveragesT.sum(axis=1)])
 
         # preparing parts of the equation
-        part1 = fiCoverages.dot(tmp5.T.tocsr())
+        part1 = np.matmul(fiCoveragesT, np.transpose(tmp4))
+
+        part2 = part1.sum(axis=1)
 
         # compute how many items of each transaction is not covered by appropriate frequent itemsets
-        fiC = colSums - part1.sum(axis=1).T
+        fiC = colSums - part2
         elapsed_time = time.process_time() - t
         print("Computing penalizations finished in: "+str(elapsed_time))
 
@@ -196,39 +189,23 @@ class FPI():
         elapsed_time = time.process_time() - t
         print("Computing final scores finished in: "+str(elapsed_time))
         # creating pandas data frame with Scores column
-        self.data['Scores'] = scorings.diagonal().T
-
+        columnOutput = ["Scores"]
+        output = pd.DataFrame(data=np.transpose(scorings), index=data2.values, columns=columnOutput, dtype=object)
 
         # print anomaly scores for each row/observation
+        print(output)
 
-        #print(self.data)
         # returns maximum value of anomaly scores
-        print(self.data[self.data['Scores'] == self.data['Scores'].max()])
-        return self.data
+        print(output[output['Scores'] == output['Scores'].max()])
 
-    def predict(self, testData, anomalyBase):
-
-        """
-                Takes output from fit method and assign class anomaly or normal
-                """
-
-        if not isinstance(testData, pd.DataFrame):
-            raise Exception("testData must be Pandas DataFrame!")
-
-        if anomalyBase < 0:
-            raise Exception("Anomaly base can't be less than 0!")
-
-        testData["Predicted"] = np.where(testData['Scores'] >= anomalyBase, "anomaly", "normal")
-        print(testData)
-        return testData
+        print(fiC)
+        return output
 
 
-data = pd.read_csv("test/data/trainData.csv", sep=";")
-labels = pd.read_csv("test/data/trainDataLabels.csv", sep=";")
 
-fpi = FPI(data, 0.3, 5)
 
-fpiFit = FPI.fit(fpi)
+
+
 
 
 
